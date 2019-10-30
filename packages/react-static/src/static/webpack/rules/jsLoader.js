@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'fs-extra'
 import babelPreset from '../../../../babel-preset'
 
 // we check which babel config file exists in the project root
@@ -35,12 +35,12 @@ export default function({ config, stage }) {
   return {
     test: /\.(js|jsx|mjs)$/,
     include: [
+      config.paths.PLUGINS,
       config.paths.SRC,
       /react-static-templates\.js/,
       /react-static-browser-plugins\.js/,
     ],
     use: [
-      // 'thread-loader',
       {
         loader: 'babel-loader',
         options: {
@@ -52,6 +52,7 @@ export default function({ config, stage }) {
           highlightCode: true,
         },
       },
+      'react-hot-loader/webpack',
     ],
   }
 }

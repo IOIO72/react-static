@@ -21,12 +21,6 @@ function initCSSLoader() {
         plugins: () => [
           postcssFlexbugsFixes,
           autoprefixer({
-            browsers: [
-              '>1%',
-              'last 4 versions',
-              'Firefox ESR',
-              'not ie < 9', // React doesn't support IE8 anyway
-            ],
             flexbox: 'no-2009', // I'd opt in for this - safari 9 & IE 10.
           }),
         ],
@@ -37,7 +31,7 @@ function initCSSLoader() {
 }
 
 export default function({ stage, isNode }) {
-  let cssLoader = initCSSLoader(stage)
+  let cssLoader = initCSSLoader()
   if (stage === 'node' || isNode) {
     return {
       test: /\.css$/,
@@ -45,7 +39,15 @@ export default function({ stage, isNode }) {
     }
   }
 
-  cssLoader = [ExtractCssChunks.loader, ...cssLoader] // seeing as it's HMR, why not :)
+  cssLoader = [
+    {
+      loader: ExtractCssChunks.loader,
+      options: {
+        hot: true,
+      },
+    },
+    ...cssLoader,
+  ] // seeing as it's HMR, why not :)
 
   return {
     test: /\.css$/,

@@ -10,20 +10,24 @@ A `static.config.js` file is optional, but recommended at your project root to u
 - [basePath](#basepath)
 - [stagingBasePath](#stagingbasepath)
 - [devBasePath](#devbasepath)
+- [assetsPath](#assetsPath)
+- [devAssetsPath](#devassetspath)
+- [stagingAssetsPath](#stagingassetspath)
 - [extractCssChunks](#extractcsschunks)
 - [inlineCss](#inlinecss)
 - [Document](#document)
-- [webpack](#webpack)
 - [devServer](#devserver)
+- [entry](#entry)
 - [paths](#paths)
-- [onStart](#onstart)
-- [onBuild](#onbuild)
-- [bundleAnalyzer](#bundleanalyzer)
 - [outputFileRate](#outputfilerate)
 - [prefetchRate](#prefetchrate)
 - [disableDuplicateRoutesWarning](#disableDuplicateRoutesWarning)
 - [disableRoutePrefixing](#disablerouteprefixing)
+- [maxThreads](#maxThreads)
+- [minLoadTime](#minLoadTime)
+- [disablePreload](#disablePreload)
 - [babelExcludes](#babelExcludes)
+- [productionSourceMaps](#productionSourceMaps)
 
 ### `getRoutes`
 
@@ -36,7 +40,7 @@ export default {
 }
 ```
 
-**Awesome Tip: Changes made to `static.config.js` while the development server is running will automatically run `getRoutes` again and any changes to routes or routeData will be hot-reloaded instantly! Don't want to edit/resave your config file? Try using [`reloadRoutes`](/docs/node-api.md/#reloadRoutes)!**
+**Awesome Tip: Changes made to `static.config.js` while the development server is running will automatically run `getRoutes` again and any changes to routes or routeData will be hot-reloaded instantly! Don't want to edit/resave your config file? Try using [`rebuildRoutes`](/docs/api.md/#rebuildRoutes)!**
 
 ### `route`
 
@@ -45,7 +49,7 @@ A route is an `object` that represents a unique location in your site and is the
 It supports the following properties:
 
 - `path: String` - The **path** of the URL to match for this route, **excluding search parameters and hash fragments, relative to your `siteRoot + basePath` (if this is a child route, also relative to this route's parent path)**
-- `component: String` - The path of the component to be used to render this route. (Relative to the root of your project)
+- `template: String` - The path of the component to be used to render this route. (Relative to the root of your project or absolute)
 - `getData: async Function(resolvedRoute, { dev }) => Object` - An async function that returns or resolves an object of any necessary data for this route to render.
   - Arguments
     - `resolvedRoute: Object` - This is the resolved route this function is handling.
@@ -53,10 +57,7 @@ It supports the following properties:
     - `dev: Boolean` - Indicates whether you are running a development or production build.
 - `children: Array[Route]` - Routes can and should have nested routes when necessary. **Route paths are inherited as they are nested, so there is no need to repeat a path prefix in nested routes**.
 - `redirect: URL` - Setting this to a URL will perform the equivalent of a 301 redirect (as much as is possible within a static site) using `http-equiv` meta tags, canonicals, etc. **This will force the page to render only the bare minimum to perform the redirect and nothing else**.
-- `noindex: Boolean` - Set this to `true` if you do not want this route or its children indexed in your automatically generated sitemap.xml. Defaults to `false`.
-- `permalink: String` - You can optionally set this route to have a custom xml sitemap permalink by supplying it here.
-- `lastModified: String(YYYY-MM-DD)` - A string representing the date when this route was last modified in the format of `YYYY-MM-DD`.
-- `priority: Float` - An optional priority for the sitemap.xml. Defaults to `0.5`
+- Routes can also have other properties that may be used in plugins. Those properties will be listed in the plugin documentation.
 
 Example:
 
@@ -67,13 +68,13 @@ export default {
     // A simple route
     {
       path: 'about',
-      component: 'src/containers/About',
+      template: 'src/containers/About',
     },
 
     // A route with data
     {
       path: 'portfolio',
-      component: 'src/containers/Portfolio',
+      template: 'src/containers/Portfolio',
       getData: async () => ({
         portfolio,
       }),
@@ -82,13 +83,13 @@ export default {
     // A route with data and dynamically generated child routes
     {
       path: 'blog',
-      component: 'src/containers/Blog',
+      template: 'src/containers/Blog',
       getData: async () => ({
         posts,
       }),
       children: posts.map(post => ({
         path: `post/${post.slug}`,
-        component: 'src/containers/BlogPost',
+        template: 'src/containers/BlogPost',
         getData: async () => ({
           post,
         }),
@@ -98,7 +99,7 @@ export default {
     // A 404 component
     {
       path: '404',
-      component: 'src/containers/NotFound',
+      template: 'src/containers/NotFound',
     },
   ],
 }
@@ -106,7 +107,7 @@ export default {
 
 ### `getSiteData`
 
-`getSiteData` is very similar to a route's `getData` function, but its result is made available to the entire site via the `SiteData` and `getSiteData` component/HOC. Any data you return here, although loaded once per session, will be embedded in every page that is exported on your site. So tread lightly ;)
+`getSiteData` is very similar to a route's `getData` function, but its result is made available to the entire site via the [`useSiteData`](api.md#usesitedata) hook, `SiteData` component and the `getSiteData` HOC. Any data you return here, although loaded once per session, will be embedded in every page that is exported on your site. So tread lightly ;)
 
 Example:
 
@@ -167,6 +168,14 @@ Works exactly like `basePath`, but only when running the dev server.
 
 Your `assetsPath` determines where your bundled JS and CSS will be loaded from. This is helpful if you want to host your assets in an external location such as a CDN.
 
+### `devAssetsPath`
+
+Works exactly like `assetsPath`, but only when running the dev server.
+
+### `stagingAssetsPath`
+
+Works exactly like `assetsPath`, but only when building with the `--staging` build flag.
+
 ### `extractCssChunks`
 
 `extractCssChunks` replaces default `ExtractTextPlugin` with `ExtractCssChunks`. It enables automatic CSS splitting into separate files by routes as well as dynamic components (using `react-universal-component`). More information about the [plugin](https://github.com/faceyspacey/extract-css-chunks-webpack-plugin) and [why it is useful as a part of CSS delivery optimisation](https://github.com/faceyspacey/extract-css-chunks-webpack-plugin#what-about-glamorous-styled-components-styled-jsx-aphrodite-etc). Defaults to `false`.
@@ -177,11 +186,11 @@ By using `extractCssChunks` option and putting code splitting at appropriate pla
 
 ### `Document`
 
-It's never been easier to customize the root document of your website! `Document` is an optional (and again, recommended) react component responsible for rendering the root of your website.
+It's never been easier to customize the root document of your website! `Document` is an optional (and again, recommended) react component responsible for rendering the HTML shell of your website.
 
 Things you may want to place here:
 
-- Custom `head` and/or `meta` tags
+- Site-wide custom `head` and/or `meta` tags
 - Site-wide analytics scripts
 - Site-wide stylesheets
 
@@ -191,14 +200,22 @@ Props
 - `Head: ReactComponent` - **Required** - An enhanced version of the default `head` tag.
 - `Body: ReactComponent` - **Required** - An enhanced version of the default `body` tag.
 - `children: ReactComponent` - **Required** - The main content of your site, including layout, routes, etc.
-- `routeInfo: Object` - All of the current route's information, including any `routeData`.
-- `siteData: Object` - Any data optionally resolved via the `getSiteData` function in this config file.
-- `renderMeta: Object` - Any data optionally set via hooks or transformers during the render process.
+- `state: Object` - The current state of the export.
+  - `routeInfo: Object` - All of the current route's information, including any `routeData`.
+  - `siteData: Object` - Any data optionally resolved via the `getSiteData` function in this config file.
+  - `renderMeta: Object` - Any data optionally set via hooks or transformers during the render process.
+  - And much more!
 
 ```javascript
 // static.config.js
 export default {
-  Document: ({ Html, Head, Body, children, siteData, renderMeta }) => (
+  Document: ({
+    Html,
+    Head,
+    Body,
+    children,
+    state: { siteData, renderMeta },
+  }) => (
     <Html lang="en-US">
       <Head>
         <meta charSet="UTF-8" />
@@ -210,9 +227,7 @@ export default {
 }
 ```
 
-### `webpack`
-
-To configure webpack, extend the build system, or make modifications, see the [Plugin API section](#plugin-api)
+Since JSX is now being used in this static.config.js file, you need to import React at the top of the file; add this: `import React from 'react'`
 
 ### `devServer`
 
@@ -239,6 +254,17 @@ export default {
 
 **Warning:** This option will be removed in a future version. Please use the [Node API hook - beforeRenderToHtml](https://github.com/Vinnl/react-static/tree/patch-3/docs/plugins#beforerendertohtml-function) instead
 
+### `entry`
+
+The name of the entry file as a string, relative to `paths.src`. This defaults to:
+
+```javascript
+// static.config.js
+export default {
+  entry: 'index.js',
+}
+```
+
 ### `paths`
 
 An `object` of internal directories used by react-static that can be customized. Each path is relative to your project root and defaults to:
@@ -254,48 +280,8 @@ export default {
     devDist: 'tmp/dev-server', // The development scratch directory.
     public: 'public', // The public directory (files copied to dist during build)
     assets: 'dist', // The output directory for bundled JS and CSS
+    buildArtifacts: 'artifacts', // The output directory for generated (internal) resources
   },
-}
-```
-
-### `onStart`
-
-A utility function that runs when the dev server starts up successfully. It provides you with the final, **readonly** devServer config object for your convenience.
-
-Example:
-
-```javascript
-// static.config.js
-export default {
-  onStart: ({ devServerConfig }) => {
-    console.log('The dev server is working!')
-  },
-}
-```
-
-### `onBuild`
-
-A utility function that runs when the a build completes successfully.
-
-Example:
-
-```javascript
-// static.config.js
-export default {
-  onBuild: async () => {
-    console.log('Everything is done building!')
-  },
-}
-```
-
-### `bundleAnalyzer`
-
-An optional `Boolean`. Set to true to serve the bundle analyzer on a production build.
-
-```javascript
-// static.config.js
-export default {
-  bundleAnalyzer: true,
 }
 ```
 
@@ -392,6 +378,19 @@ export default {
 }
 ```
 
+### `productionSourceMaps`
+
+Set this flag to `true` to include source maps in production.
+
+- Defaults to `false`
+
+```javascript
+// static.config.js
+export default {
+  productionSourceMaps: true,
+}
+```
+
 ---
 
 ## Plugin Api
@@ -402,4 +401,4 @@ React Static has tons of other customization possibilities available through the
 - Rendering pipeline customizations and transformations for React components, elements, the Document wrapper, etc.
 - Head tag injection
 
-Every React Static project can utilize the plugin API locally without needing to create a plugin by creating either `node.api.js` or `browser.api.js` files in the root of your project. See the [Plugin Documentation](https://github.com/nozzle/react-static/blob/master/docs/plugins.md) for more information!
+Every React Static project can utilize the plugin API locally without needing to create a plugin by creating either `node.api.js` or `browser.api.js` files in the root of your project. See the [Plugin Documentation](https://github.com/react-static/react-static/tree/master/docs/plugins) for more information!

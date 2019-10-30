@@ -1,11 +1,12 @@
 import React from 'react'
 import { mount } from 'enzyme'
-import { makeHtmlWithMeta } from '../HtmlWithMeta'
+import makeHtmlWithMeta from '../HtmlWithMeta'
 
 describe('HtmlWithMeta', () => {
-  test('when route is a static route', () => {
-    const HtmlWithMeta = makeHtmlWithMeta({
+  test('when route is a static route', async () => {
+    const HtmlWithMeta = await makeHtmlWithMeta({
       head: { htmlProps: { lang: 'en' } },
+      plugins: [],
     })
 
     const htmlWithMeta = mount(

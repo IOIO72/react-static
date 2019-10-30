@@ -1,105 +1,70 @@
 import React from 'react'
-import { Router as ReachRouter } from '@reach/router'
-
 //
-import {
-  routeInfoByPath,
-  sharedDataByHash,
-  registerTemplateForPath,
-  plugins,
-} from '../'
-import { getBasePath, makeHookReducer } from '../utils'
-import ErrorBoundary from './ErrorBoundary'
-import HashScroller from './HashScroller'
-import { withStaticInfo } from './StaticInfo'
+import { plugins } from '..'
 
-const DefaultPath = ({ render }) => render
+export default function Root({ children }) {
+  const ResolvedRoot = React.useMemo(
+    () => plugins.Root(({ children }) => children),
+    [plugins]
+  )
 
-const DefaultRouter = ({ children, basepath }) => (
-  <ReachRouter basepath={basepath}>
-    <DefaultPath default render={children} />
-  </ReachRouter>
-)
+  const [error, setError] = React.useState(null)
 
-const RouterHook = makeHookReducer(plugins, 'Router', { sync: true })
-const ResolvedRouter = RouterHook(DefaultRouter)
-
-const Root = withStaticInfo(
-  class Root extends React.Component {
-    static defaultProps = {
-      disableScroller: false, // TODO:v6 document this!
-      autoScrollToTop: true,
-      autoScrollToHash: true,
-      scrollToTopDuration: 0,
-      scrollToHashDuration: 800,
-      scrollToHashOffset: 0,
-    }
-    constructor(props) {
-      super()
-      const { staticInfo } = props
-      if (process.env.REACT_STATIC_ENV === 'production' && staticInfo) {
-        const {
-          path,
-          sharedData,
-          sharedHashesByProp,
-          templateIndex,
-        } = staticInfo
-
-        // Hydrate routeInfoByPath with the embedded routeInfo
-        routeInfoByPath[path] = staticInfo
-
-        // Hydrate sharedDataByHash with the embedded routeInfo
-        Object.keys(sharedHashesByProp).forEach(propKey => {
-          sharedDataByHash[sharedHashesByProp[propKey]] = sharedData[propKey]
-        })
-
-        // In SRR and production, synchronously register the templateIndex for the
-        // initial path
-        registerTemplateForPath(path, templateIndex)
+  React.useEffect(() => {
+    if (module && module.hot) {
+      const hotReloadHandler = status => {
+        if (status === 'idle') {
+          setError(null)
+        }
+      }
+      module.hot.addStatusHandler(hotReloadHandler)
+      return () => {
+        module.hot.removeStatusHandler(hotReloadHandler)
       }
     }
-    render() {
-      const {
-        children,
-        disableScroller,
-        autoScrollToTop,
-        autoScrollToHash,
-        scrollToTopDuration,
-        scrollToHashDuration,
-        scrollToHashOffset,
-        staticInfo,
-      } = this.props
+  })
 
-      const scrollerProps = {
-        autoScrollToTop,
-        autoScrollToHash,
-        scrollToTopDuration,
-        scrollToHashDuration,
-        scrollToHashOffset,
-      }
+  return (
+    <Catch onCatch={setError}>
+      {error ? (
+        <pre
+          style={{
+            display: 'block',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+            background: '#222',
+            color: 'white',
+            margin: 0,
+            padding: '1rem',
+            overflow: 'scroll',
+            fontSize: '14px',
+          }}
+        >
+          {`An internal error occured!
 
-      let Wrapper = ({ children }) => children
+${
+  process.env.NODE_ENV === 'production'
+    ? 'Please see the console for more details.'
+    : error.stack
+}
+          `}
+        </pre>
+      ) : (
+        <ResolvedRoot>{children}</ResolvedRoot>
+      )}
+    </Catch>
+  )
+}
 
-      const basepath = getBasePath()
-
-      // Add the scroller if not disabled
-      if (!disableScroller) {
-        Wrapper = ({ children }) => (
-          <HashScroller {...scrollerProps}>{children}</HashScroller>
-        )
-      }
-
-      return (
-        <ErrorBoundary>
-          <Wrapper>
-            <ResolvedRouter basepath={basepath} staticInfo={staticInfo}>
-              {children}
-            </ResolvedRouter>
-          </Wrapper>
-        </ErrorBoundary>
-      )
-    }
+class Catch extends React.Component {
+  componentDidCatch(error) {
+    this.props.onCatch(error)
   }
-)
 
-export default Root
+  render() {
+    return this.props.children
+  }
+}

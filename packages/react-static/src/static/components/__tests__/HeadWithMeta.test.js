@@ -1,6 +1,6 @@
 import React from 'react'
 import { mount } from 'enzyme'
-import { makeHeadWithMeta } from '../HeadWithMeta'
+import makeHeadWithMeta from '../HeadWithMeta'
 
 describe('HeadWithMeta', () => {
   let data
@@ -33,6 +33,7 @@ describe('HeadWithMeta', () => {
       config: {
         inlineCss: false,
       },
+      plugins: [],
     }
   })
 

@@ -1,14 +1,13 @@
-import fs from 'fs-extra'
+import chalk from 'chalk'
 //
-import { exportRoutes, buildXML, prepareRoutes, getConfig } from '../static'
+import exportRoutes from '../static/exportRoutes'
+import getRoutes from '../static/getRoutes'
+import getConfig from '../static/getConfig'
+import extractTemplates from '../static/extractTemplates'
+import { importClientStats } from '../static/clientStats'
 
-export default async ({
-  config: originalConfig,
-  staging,
-  debug,
-  isBuild,
-  incremental,
-} = {}) => {
+export default async (state = {}) => {
+  const { debug, isBuildCommand, staging, incremental } = state
   // ensure ENV variables are set
   if (typeof process.env.NODE_ENV === 'undefined' && !debug) {
     process.env.NODE_ENV = 'production'
@@ -17,69 +16,49 @@ export default async ({
   process.env.REACT_STATIC_ENV = 'production'
   process.env.BABEL_ENV = 'production'
 
-  if (staging) {
-    process.env.REACT_STATIC_STAGING = 'true'
-  }
-
-  if (debug) {
-    process.env.REACT_STATIC_DEBUG = 'true'
-  }
-
   if (incremental) {
     process.env.REACT_STATIC_INCREMENTAL = 'true'
   }
 
-  let config
+  state.stage = 'prod'
+
+  if (!isBuildCommand) {
+    console.log(
+      `Exporting application for ${staging ? 'Staging' : 'Production'}...`
+    )
+    console.log('')
+  }
 
   // Allow config location to be overriden
-  if (!isBuild) {
-    config = await getConfig(originalConfig)
-    config.originalConfig = originalConfig
-    // Restore the process environment variables that were present during the build
-    const bundledEnv = await fs.readJson(
-      `${config.paths.TEMP}/bundle-environment.json`
-    )
-    Object.keys(bundledEnv).forEach(key => {
-      if (typeof process.env[key] === 'undefined') {
-        process.env[key] = bundledEnv[key]
-      }
-    })
-    config = await prepareRoutes({ config, opts: { dev: false, incremental } })
-  } else {
-    config = originalConfig
+  if (!isBuildCommand) {
+    state = await getConfig(state)
+    state = await getRoutes(state)
+    state = await extractTemplates(state)
   }
 
-  if (!config.routes) {
-    await prepareRoutes(config, { dev: false })
+  if (!state.routes) {
+    state = await getRoutes(state)
   }
 
-  if (debug) {
-    console.log('DEBUG - Resolved static.config.js:')
-    console.log(config)
-  }
+  state = await importClientStats(state)
+  state = await exportRoutes(state)
 
-  const clientStats = await fs.readJson(
-    `${config.paths.TEMP}/client-stats.json`
-  )
+  console.log(`
+Your app is now exported! Here's what we suggest doing next:
+${
+  staging
+    ? `
+- Test your app locally
+  - ${chalk.green(
+    'serve dist -p 3000'
+  )} (or your preferred static server utility)`
+    : `
+- Upload your 'dist' directory to your favorite static host! We recommend using Netlify:
+  - ${chalk.green('npx netlify-cli deploy')}`
+}
+- Analyze your app's webpack bundles
+  - ${chalk.green('react-static bundle --analyze')}
+`)
 
-  if (!clientStats) {
-    throw new Error('No Client Stats Found')
-  }
-
-  try {
-    await exportRoutes({
-      config,
-      clientStats,
-    })
-  } catch (e) {
-    const PrettyError = require('pretty-error')
-    console.log(new PrettyError().render(e))
-    process.exit(1)
-  }
-
-  await buildXML({ config })
-
-  if (config.onBuild) {
-    await config.onBuild({ config })
-  }
+  return state
 }

@@ -5,18 +5,18 @@ export default function({ config }) {
     test: /\.(js|jsx|mjs)$/,
     exclude: [/@babel(?:\/|\\{1,2})runtime/, ...(config.babelExcludes || [])],
     use: [
-      // 'thread-loader',
       {
         loader: 'babel-loader',
         options: {
           babelrc: false,
           configFile: false,
           compact: false,
-          presets: [[babelPreset, { external: true, helpers: true }]],
+          presets: [[babelPreset, { external: true }]],
           cacheDirectory: true,
           sourceMaps: false,
         },
       },
+      'react-hot-loader/webpack',
     ],
   }
 }

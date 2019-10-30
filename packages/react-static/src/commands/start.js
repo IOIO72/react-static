@@ -1,66 +1,42 @@
-import fs from 'fs-extra'
-//
-import {
-  prepareRoutes,
-  preparePlugins,
-  startDevServer,
-  reloadRoutes,
-  getConfig,
-} from '../static'
+import getRoutes from '../static/getRoutes'
+import generateBrowserPlugins from '../static/generateBrowserPlugins'
+import runDevServer from '../static/webpack/runDevServer'
+import fetchSiteData from '../static/fetchSiteData'
+import getConfig from '../static/getConfig'
 import extractTemplates from '../static/extractTemplates'
-import { createIndexFilePlaceholder } from '../utils'
+import generateTemplates from '../static/generateTemplates'
+import createIndexPlaceholder from '../utils/createIndexPlaceholder'
 //
 
-let cleaned
-let indexCreated
-
-export default (async function start({ config: configPath, debug } = {}) {
+export default (async function start(state = {}) {
   // ensure ENV variables are set
   if (typeof process.env.NODE_ENV === 'undefined') {
     process.env.NODE_ENV = 'development'
   }
-  if (debug) {
-    process.env.REACT_STATIC_DEBUG = 'true'
-  }
+
   process.env.REACT_STATIC_ENV = 'development'
   process.env.BABEL_ENV = 'development'
 
-  // Use callback style to subscribe to changes
-  await getConfig(configPath, async config => {
-    if (debug) {
-      console.log('DEBUG - Resolved static.config.js:')
-      console.log(config)
-    }
+  state.stage = 'dev'
 
-    if (!cleaned) {
-      cleaned = true
-      // Clean the dist folder
-      await fs.remove(config.paths.DIST)
-    }
+  console.log(`Starting Development Server...`)
 
-    // Get the site data
-    config.siteData = await config.getSiteData({ dev: true })
+  // Use a callback (a subscription)
+  getConfig(state, async state => {
+    state = await fetchSiteData(state)
+    state = await createIndexPlaceholder(state)
+    state = await generateBrowserPlugins(state)
 
-    // Render an index.html placeholder
-    if (!indexCreated) {
-      indexCreated = true
-      await createIndexFilePlaceholder({
-        config,
-      })
-    }
-
-    config = await preparePlugins({ config })
-
-    await prepareRoutes({ config, opts: { dev: true } }, async config => {
-      await extractTemplates(config)
-      reloadRoutes()
-
-      // Build the JS bundle
-      await startDevServer({ config })
+    // Use a callback (a subscription)
+    // eslint-disable-next-line
+    await getRoutes(state, async state => {
+      state = await extractTemplates(state)
+      state = await generateTemplates(state)
+      state = await runDevServer(state)
     })
   })
 
   await new Promise(() => {
-    // Do nothing, the user must exit this command
+    // Do nothing indefinitely, the user must exit this command
   })
 })

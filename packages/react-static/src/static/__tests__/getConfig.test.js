@@ -1,37 +1,5 @@
-// Usually imports should go first, but mocks should precede imports:
-/* eslint-disable import/first */
-const mockPlugin = jest.fn()
-// When it can't find the plugin file and NODE_ENV === 'test',
-// the plugin directory will be set to `mock-plugin`
-jest.mock('mock-plugin/node.api.js', () => ({ default: mockPlugin }), {
-  virtual: true,
-})
-jest.mock('fs-extra', () => {
-  const fsExtra = require.requireActual('fs-extra')
-  return Object.assign({}, fsExtra, {
-    pathExistsSync: path => {
-      // We've mocked this plug-in, so even though it does not exist according to `fs-extra`,
-      // it can be require()d. Thus, make fs-extra say that it does exist:
-      if (path === 'mock-plugin/node.api.js') {
-        return true
-      }
-
-      return fsExtra.pathExistsSync(path)
-    },
-  })
-})
-
+import path from 'path'
 import getConfig, { buildConfig } from '../getConfig'
-import defaultConfigDevelopment from '../__mocks__/defaultConfigDevelopment.mock'
-import defaultConfigProduction from '../__mocks__/defaultConfigProduction.mock'
-
-jest.mock('path', () => ({
-  resolve: (stringOne = '/', stringTwo = '') => `${stringOne}${stringTwo}`,
-  join: (stringOne, stringTwo) => `${stringOne}/${stringTwo}`,
-  dirname: () => 'root/',
-}))
-
-jest.mock('../../utils/getDirname', () => () => './dirname/')
 
 const testConfiguration = (configuration, configurationMock) => {
   expect(configuration).toMatchObject(configurationMock)
@@ -39,11 +7,20 @@ const testConfiguration = (configuration, configurationMock) => {
   expect(configuration.getRoutes).toBeInstanceOf(Function)
 }
 
+const defaultConfig = {
+  packageConfig: {},
+}
+
 describe('buildConfig', () => {
   let reactStaticEnviroment
   let reactStaticPrefetchRate
   let reactStaticDisableRoutePreFixing
   let spyProcess
+
+  const defaultConfigDevelopment = require('../__mocks__/config.development.mock.js')
+    .default
+  const defaultConfigProduction = require('../__mocks__/config.production.mock.js')
+    .default
 
   beforeEach(() => {
     reactStaticEnviroment = process.env.REACT_STATIC_ENV
@@ -54,35 +31,35 @@ describe('buildConfig', () => {
   })
 
   describe('default configuration', () => {
-    test('when REACT_STATIC_ENV is development', async () => {
+    test('when REACT_STATIC_ENV is development', () => {
       process.env.REACT_STATIC_ENV = 'development'
 
-      const configuration = await buildConfig()
+      const state = buildConfig({})
 
-      testConfiguration(configuration, defaultConfigDevelopment)
+      testConfiguration(state.config, defaultConfigDevelopment)
     })
 
-    it('when REACT_STATIC_ENV is production', async () => {
+    it('when REACT_STATIC_ENV is production', () => {
       process.env.REACT_STATIC_ENV = 'production'
 
-      const configuration = await buildConfig()
+      const state = buildConfig({})
 
-      testConfiguration(configuration, defaultConfigProduction)
+      testConfiguration(state.config, defaultConfigProduction)
     })
   })
 
-  test('REACT_STATIC_PREFETCH_RATE is set by the prefetchRate (default)', async () => {
+  test('REACT_STATIC_PREFETCH_RATE is set by the prefetchRate (default)', () => {
     process.env.REACT_STATIC_PREFETCH_RATE = null
 
-    await buildConfig()
+    buildConfig({})
 
     expect(process.env.REACT_STATIC_PREFETCH_RATE).toBe('5')
   })
 
-  test('REACT_STATIC_PREFETCH_RATE is set by the prefetchRate (from config)', async () => {
+  test('REACT_STATIC_PREFETCH_RATE is set by the prefetchRate (from config)', () => {
     process.env.REACT_STATIC_PREFETCH_RATE = null
 
-    await buildConfig({ prefetchRate: 10 })
+    buildConfig({}, { prefetchRate: 10 })
 
     expect(process.env.REACT_STATIC_PREFETCH_RATE).toBe('10')
   })
@@ -94,10 +71,70 @@ describe('buildConfig', () => {
 
     spyProcess.mockRestore()
   })
+
+  describe('assetsPath is correct', () => {
+    test('when no user-supplied assetsPath exists', () => {
+      const { config } = buildConfig({}, { assetsPath: undefined })
+
+      expect(config.assetsPath).toBe('')
+    })
+    test('when relative user-supplied assetsPath exists without trailing slash', () => {
+      const { config } = buildConfig({}, { assetsPath: '/relative-path' })
+
+      expect(config.assetsPath).toBe('/relative-path/')
+    })
+
+    test('when relative user-supplied assetsPath exists with trailing slash', () => {
+      const { config } = buildConfig({}, { assetsPath: '/relative-path/' })
+
+      expect(config.assetsPath).toBe('/relative-path/')
+    })
+
+    test('when absolute user-supplied assetsPath exists without trailing slash', () => {
+      const { config } = buildConfig(
+        {},
+        { assetsPath: 'https://example.com/assets' }
+      )
+
+      expect(config.assetsPath).toBe('https://example.com/assets/')
+    })
+
+    test('when absolute user-supplied assetsPath exists with trailing slash', () => {
+      const { config } = buildConfig(
+        {},
+        { assetsPath: 'https://example.com/assets/' }
+      )
+
+      expect(config.assetsPath).toBe('https://example.com/assets/')
+    })
+  })
+
+  describe('publicPath is absolute', () => {
+    test('when user supplies a site root', () => {
+      const { config } = buildConfig({}, { siteRoot: 'http://example.com' })
+      expect(config.publicPath).toBe('http://example.com/')
+    })
+
+    test('when user supplies a basePath', () => {
+      const { config } = buildConfig({}, { basePath: 'dist' })
+      expect(config.publicPath).toBe('/dist/')
+    })
+
+    test('when user supplies a site root and a basePath', () => {
+      const { config } = buildConfig(
+        {},
+        { siteRoot: 'http://example.com', basePath: 'dist' }
+      )
+      expect(config.publicPath).toBe('http://example.com/dist/')
+    })
+  })
 })
 
 describe('getConfig', () => {
   let spyProcess
+
+  const defaultConfigProduction = require('../__mocks__/config.production.mock.js')
+    .default
 
   beforeEach(() => {
     spyProcess = jest.spyOn(process, 'cwd').mockImplementation(() => './root/')
@@ -105,31 +142,40 @@ describe('getConfig', () => {
 
   describe('when no path or configuration is not provided', () => {
     it('should return a configuration using default file', async () => {
-      // mapped by the moduleNameMapper in package.js -> src/static/__mocks__/static.config.js
-      // default path is 'static.config.js'
-      const configuration = await getConfig()
+      const state = getConfig(defaultConfig)
 
-      testConfiguration(configuration, defaultConfigProduction)
+      testConfiguration(state.config, defaultConfigProduction)
     })
   })
 
   describe('when provided a path to configuration', () => {
-    it('should return a configuration using file provided', async () => {
-      // mapped by the moduleNameMapper in package.json -> src/static/__mocks__/static.config.js
-      const configuration = await getConfig('./path/to/static.config.js')
-
-      testConfiguration(configuration, {
-        ...defaultConfigProduction,
-        entry: 'path/to/entry/index.js',
+    it('should find the configuration file using any supported extension', async () => {
+      const state = getConfig({
+        configPath: path.resolve(
+          './src/static/__mocks__/static.config.jsx.mock.jsx'
+        ),
       })
+
+      testConfiguration(state.config, defaultConfigProduction)
+      expect(state.config.Document).toBeInstanceOf(Function) // React component
     })
 
     it('should pass on plugin options to those plugins', async () => {
-      mockPlugin.mockReset()
-      // mapped by the moduleNameMapper in package.json -> src/static/__mocks__/configWithPluginWithOptions.mock.js
-      await getConfig('./path/to/configWithPluginWithOptions.mock.js')
+      getConfig({
+        configPath: path.resolve(
+          './src/static/__mocks__/config.with-plugin.mock.js'
+        ),
+      })
+    })
+  })
 
-      expect(mockPlugin.mock.calls[0]).toEqual([{ mockOption: 'some-option' }])
+  xdescribe('when called with an asynchronous plugin', () => {
+    xit('should throw an error', () => {
+      // TODO mock / inject a promise-plugin
+
+      expect(() => getConfig(defaultConfig)).toThrow(
+        'Expected hook to return a value, but received promise instead. A plugin is attempting to use a sync plugin with an async function!'
+      )
     })
   })
 

@@ -1,9 +1,13 @@
 import path from 'path'
 import slash from 'slash'
 import fs from 'fs-extra'
+//
+import corePlugins from './plugins'
 
-export default async ({ config }) => {
-  const { paths } = config
+export default async state => {
+  state = await corePlugins.beforePrepareBrowserPlugins(state)
+
+  const { plugins, config } = state
 
   // A deduped list of pluginImports
   const pluginImports = []
@@ -19,7 +23,9 @@ export default async ({ config }) => {
           ? pluginImports.indexOf(browserLocation)
           : -1
         if (pluginIndex === -1 && browserLocation) {
-          pluginImports.push(slash(browserLocation))
+          pluginImports.push(
+            slash(path.resolve(config.paths.ARTIFACTS, browserLocation))
+          )
           pluginIndex = pluginImports.length - 1
         }
 
@@ -27,17 +33,19 @@ export default async ({ config }) => {
 
         // IIF to return the final plugin
         return `{
-  location: "${location}",
-  plugins: ${recurse(plugins || [])},
-  hooks: ${
-    browserLocation ? `plugin${pluginIndex}(${JSON.stringify(options)})` : `{}`
-  }
-}`
+        location: "${slash(path.resolve(config.paths.ARTIFACTS, location))}",
+        plugins: ${recurse(plugins || [])},
+        hooks: ${
+          browserLocation
+            ? `plugin${pluginIndex}(${JSON.stringify(options)})`
+            : `{}`
+        }
+      }`
       })
       .join(',\n')}]`
 
   // Create the pluginsText
-  const pluginsText = recurse(config.plugins || [])
+  const pluginsText = recurse(plugins || [])
 
   // Create the pluginImportsText
   const pluginImportsText = pluginImports
@@ -54,7 +62,9 @@ const plugins = ${pluginsText}
 // Export em!
 export default plugins`
 
-  const targetPath = path.join(paths.DIST, 'react-static-browser-plugins.js')
+  const targetPath = path.join(process.env.REACT_STATIC_PLUGINS_PATH)
   await fs.remove(targetPath)
   await fs.outputFile(targetPath, file)
+
+  return corePlugins.afterPrepareBrowserPlugins(state)
 }
